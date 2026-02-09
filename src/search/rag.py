@@ -2,6 +2,7 @@ import os
 from openai import OpenAI
 from dotenv import load_dotenv
 from src.search.semantic_search import search
+from src.search.grounding import check_grounding
 
 load_dotenv()
 client = OpenAI()
@@ -33,8 +34,8 @@ def build_context(results):
     return "\n---\n".join(context_parts)
 
 
-def ask(query, top_k=5):
-    """Full RAG pipeline: search + generate."""
+def ask(query, top_k=5, verify_grounding=True):
+    """Full RAG pipeline: search + generate + grounding check."""
     results = search(query, top_k=top_k)
     context = build_context(results)
 
@@ -51,32 +52,46 @@ def ask(query, top_k=5):
     answer = response.choices[0].message.content
     usage = response.usage
 
-    return {
+    sources = [
+        {
+            "api_name": r["metadata"]["api_name"],
+            "score": r["score"],
+            "type": r["metadata"]["type"],
+            "text": r["text"][:200],
+        }
+        for r in results
+    ]
+
+    result = {
         "query": query,
         "answer": answer,
-        "sources": [
-            {
-                "api_name": r["metadata"]["api_name"],
-                "score": r["score"],
-                "type": r["metadata"]["type"],
-                "text": r["text"][:200],
-            }
-            for r in results
-        ],
+        "sources": sources,
         "tokens": {
             "input": usage.prompt_tokens,
             "output": usage.completion_tokens,
         },
     }
 
+    if verify_grounding:
+        grounding = check_grounding(answer, sources)
+        result["grounding"] = {
+            "score": grounding.get("grounding_score", 0),
+            "supported": grounding.get("supported_count", 0),
+            "total": grounding.get("total_count", 0),
+            "claims": grounding.get("claims", []),
+        }
+
+    return result
+
 
 if __name__ == "__main__":
-    query = "I need an API to send SMS messages internationally"
+    query = "How do I authenticate with the Authentiq API?"
     print(f"Query: {query}\n")
 
     result = ask(query)
     print(f"Answer:\n{result['answer']}\n")
-    print(f"Sources:")
-    for s in result["sources"]:
-        print(f"  - {s['api_name']} (score: {s['score']:.3f})")
+    print(f"Grounding Score: {result['grounding']['score']}")
+    print(f"Claims: {result['grounding']['supported']}/{result['grounding']['total']} supported")
+    for claim in result["grounding"]["claims"]:
+        print(f"  [{claim['status']}] {claim['claim']}")
     print(f"\nTokens: {result['tokens']}")
