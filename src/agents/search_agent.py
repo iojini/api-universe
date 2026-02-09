@@ -3,13 +3,16 @@ import json
 from openai import OpenAI
 from dotenv import load_dotenv
 from langgraph.graph import StateGraph, END
-from typing import TypedDict, Annotated
+from typing import TypedDict
 from src.search.semantic_search import search
 from src.search.grounding import check_grounding
 
 load_dotenv()
 client = OpenAI()
 MODEL = os.getenv("OPENAI_MODEL", "gpt-5.2-chat-latest")
+
+GROUNDING_THRESHOLD = 0.5
+MAX_RETRIES = 1
 
 
 class AgentState(TypedDict):
@@ -20,10 +23,10 @@ class AgentState(TypedDict):
     answer: str
     grounding: dict
     trace: list
+    retry_count: int
 
 
 def classify_query(state: AgentState) -> AgentState:
-    """Determine if the query is simple or complex."""
     messages = [
         {"role": "system", "content": """Classify the user query into one of these types:
 - SIMPLE: Single straightforward question about one API or topic
@@ -50,7 +53,6 @@ Respond with ONLY the type in JSON: {"type": "SIMPLE"} or {"type": "COMPARE"} or
 
 
 def decompose_query(state: AgentState) -> AgentState:
-    """Break complex queries into sub-queries."""
     if state["query_type"] == "SIMPLE":
         state["sub_queries"] = [state["query"]]
         state["trace"].append({"step": "decompose", "result": "single query (simple)"})
@@ -78,7 +80,6 @@ Respond with ONLY a JSON array: ["sub query 1", "sub query 2"]"""},
 
 
 def retrieve(state: AgentState) -> AgentState:
-    """Run semantic search for each sub-query."""
     all_results = []
     seen = set()
 
@@ -100,7 +101,6 @@ def retrieve(state: AgentState) -> AgentState:
 
 
 def generate(state: AgentState) -> AgentState:
-    """Generate answer from retrieved results."""
     context_parts = []
     for i, r in enumerate(state["all_results"][:10]):
         meta = r["metadata"]
@@ -132,7 +132,6 @@ Rules:
 
 
 def verify(state: AgentState) -> AgentState:
-    """Run grounding check on the answer."""
     sources = [
         {"api_name": r["metadata"]["api_name"], "text": r["text"][:200]}
         for r in state["all_results"][:10]
@@ -149,9 +148,47 @@ def verify(state: AgentState) -> AgentState:
     return state
 
 
-def route_after_classify(state: AgentState) -> str:
-    """Route based on query type."""
-    return "decompose"
+def refine_query(state: AgentState) -> AgentState:
+    """Refine the query when grounding is low."""
+    state["retry_count"] += 1
+
+    unsupported = [
+        c["claim"] for c in state["grounding"].get("claims", [])
+        if c["status"] == "UNSUPPORTED"
+    ]
+
+    messages = [
+        {"role": "system", "content": """The previous search didn't return well-grounded results.
+Based on the unsupported claims, generate 2-3 refined search queries that might find better sources.
+Respond with ONLY a JSON array: ["refined query 1", "refined query 2"]"""},
+        {"role": "user", "content": f"Original query: {state['query']}\nUnsupported claims: {json.dumps(unsupported)}"},
+    ]
+
+    response = client.chat.completions.create(model=MODEL, messages=messages)
+    raw = response.choices[0].message.content.strip()
+
+    try:
+        clean = raw.replace("```json", "").replace("```", "").strip()
+        refined = json.loads(clean)
+    except json.JSONDecodeError:
+        refined = [state["query"]]
+
+    state["sub_queries"] = refined
+    state["trace"].append({
+        "step": "refine",
+        "reason": f"grounding score {state['grounding']['score']} below threshold {GROUNDING_THRESHOLD}",
+        "refined_queries": refined,
+        "retry": state["retry_count"],
+    })
+    return state
+
+
+def should_retry(state: AgentState) -> str:
+    """Decide whether to retry or finish."""
+    score = state["grounding"].get("score", 0)
+    if score < GROUNDING_THRESHOLD and state["retry_count"] < MAX_RETRIES:
+        return "refine"
+    return "end"
 
 
 # Build the graph
@@ -161,19 +198,20 @@ workflow.add_node("decompose", decompose_query)
 workflow.add_node("retrieve", retrieve)
 workflow.add_node("generate", generate)
 workflow.add_node("verify", verify)
+workflow.add_node("refine", refine_query)
 
 workflow.set_entry_point("classify")
 workflow.add_edge("classify", "decompose")
 workflow.add_edge("decompose", "retrieve")
 workflow.add_edge("retrieve", "generate")
 workflow.add_edge("generate", "verify")
-workflow.add_edge("verify", END)
+workflow.add_conditional_edges("verify", should_retry, {"refine": "refine", "end": END})
+workflow.add_edge("refine", "retrieve")
 
 agent = workflow.compile()
 
 
 def run_agent(query: str) -> dict:
-    """Run the full agent pipeline."""
     initial_state = {
         "query": query,
         "query_type": "",
@@ -182,6 +220,7 @@ def run_agent(query: str) -> dict:
         "answer": "",
         "grounding": {},
         "trace": [],
+        "retry_count": 0,
     }
 
     result = agent.invoke(initial_state)
@@ -192,6 +231,7 @@ def run_agent(query: str) -> dict:
         "answer": result["answer"],
         "grounding": result["grounding"],
         "trace": result["trace"],
+        "retries": result["retry_count"],
         "sources": [
             {
                 "api_name": r["metadata"]["api_name"],
@@ -204,14 +244,15 @@ def run_agent(query: str) -> dict:
 
 
 if __name__ == "__main__":
-    query = "Compare authentication APIs that support passwordless login"
+    query = "Which REST APIs support GraphQL subscriptions natively?"
     print(f"Query: {query}\n")
 
     result = run_agent(query)
 
     print(f"Type: {result['query_type']}")
+    print(f"Retries: {result['retries']}")
     print(f"\nTrace:")
     for step in result["trace"]:
         print(f"  {step}")
-    print(f"\nAnswer:\n{result['answer']}")
     print(f"\nGrounding: {result['grounding']['score']}")
+    print(f"\nAnswer:\n{result['answer']}")
