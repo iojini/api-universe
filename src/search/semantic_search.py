@@ -4,6 +4,7 @@ import numpy as np
 import faiss
 from openai import OpenAI
 from dotenv import load_dotenv
+from src.search.reranker import rerank
 
 load_dotenv()
 client = OpenAI()
@@ -18,8 +19,11 @@ with open(METADATA_PATH, "r") as f:
     metadata = json.load(f)
 
 
-def search(query, top_k=5):
+def search(query, top_k=5, use_reranker=True):
     """Search the vector store with a natural language query."""
+    # Retrieve more candidates for re-ranking
+    retrieve_k = top_k * 5 if use_reranker else top_k
+
     response = client.embeddings.create(
         model=EMBEDDING_MODEL,
         input=[query],
@@ -27,7 +31,7 @@ def search(query, top_k=5):
     query_embedding = np.array([response.data[0].embedding], dtype="float32")
     faiss.normalize_L2(query_embedding)
 
-    scores, indices = index.search(query_embedding, top_k)
+    scores, indices = index.search(query_embedding, retrieve_k)
 
     results = []
     for score, idx in zip(scores[0], indices[0]):
@@ -37,15 +41,24 @@ def search(query, top_k=5):
         result["score"] = float(score)
         results.append(result)
 
-    return results
+    if use_reranker and results:
+        results = rerank(query, results, top_k=top_k)
+
+    return results[:top_k]
 
 
 if __name__ == "__main__":
     query = "I need an API to send SMS messages internationally"
     print(f"Query: {query}\n")
 
-    results = search(query, top_k=5)
+    print("WITH re-ranking:")
+    results = search(query, top_k=5, use_reranker=True)
     for i, r in enumerate(results):
-        print(f"{i + 1}. [{r['score']:.3f}] {r['metadata']['api_name']}")
-        print(f"   {r['text'][:120]}...")
-        print()
+        print(f"  {i+1}. [{r.get('rerank_score', 0):.3f}] {r['metadata']['api_name']}")
+        print(f"     {r['text'][:100]}")
+
+    print("\nWITHOUT re-ranking:")
+    results = search(query, top_k=5, use_reranker=False)
+    for i, r in enumerate(results):
+        print(f"  {i+1}. [{r['score']:.3f}] {r['metadata']['api_name']}")
+        print(f"     {r['text'][:100]}")
