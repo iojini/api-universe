@@ -12,46 +12,26 @@ EVAL_RESULTS_PATH = "data/processed/eval_results.json"
 def create_sample_golden_dataset():
     """Create a starter golden dataset for evaluation."""
     dataset = [
-        {
-            "query": "API for strong authentication without passwords",
-            "expected_api": "Authentiq API",
-            "expected_type": "overview",
-        },
-        {
-            "query": "push sign-in login endpoint",
-            "expected_api": "Authentiq API",
-            "expected_type": "endpoint",
-        },
-        {
-            "query": "SMS transport configuration",
-            "expected_api": "Alerter System API",
-            "expected_type": "endpoint",
-        },
-        {
-            "query": "1Password secrets management REST API",
-            "expected_api": "1Password Connect",
-            "expected_type": "overview",
-        },
-        {
-            "query": "payment processing checkout",
-            "expected_api": "Adyen",
-            "expected_type": "endpoint",
-        },
-        {
-            "query": "geolocation IP address lookup",
-            "expected_api": "abstractapi.com",
-            "expected_type": "overview",
-        },
-        {
-            "query": "create a webhook notification",
-            "expected_api": None,
-            "expected_type": "endpoint",
-        },
-        {
-            "query": "balance platform transfer funds",
-            "expected_api": "Adyen",
-            "expected_type": "endpoint",
-        },
+        {"query": "API for strong authentication without passwords", "expected_api": "Authentiq", "expected_type": "overview"},
+        {"query": "push sign-in login endpoint", "expected_api": "Authentiq", "expected_type": "endpoint"},
+        {"query": "SMS transport configuration", "expected_api": "Alerter System", "expected_type": "endpoint"},
+        {"query": "1Password secrets management REST API", "expected_api": "1Password", "expected_type": "overview"},
+        {"query": "payment processing checkout", "expected_api": "Adyen", "expected_type": "endpoint"},
+        {"query": "IP address geolocation lookup", "expected_api": "geolocation", "expected_type": "overview"},
+        {"query": "create a webhook notification", "expected_api": None, "expected_type": "endpoint"},
+        {"query": "balance platform transfer funds", "expected_api": "Adyen", "expected_type": "endpoint"},
+        {"query": "send email transactional messages", "expected_api": None, "expected_type": "endpoint"},
+        {"query": "cloud object storage bucket", "expected_api": "Amazon", "expected_type": "overview"},
+        {"query": "machine learning model deployment", "expected_api": "Amazon SageMaker", "expected_type": "overview"},
+        {"query": "DNS domain name resolution", "expected_api": "Route 53", "expected_type": "overview"},
+        {"query": "video upload and streaming API", "expected_api": "api.video", "expected_type": "overview"},
+        {"query": "serverless function execution", "expected_api": "Lambda", "expected_type": "overview"},
+        {"query": "database backup and restore", "expected_api": None, "expected_type": "endpoint"},
+        {"query": "container orchestration service", "expected_api": "Amazon", "expected_type": "overview"},
+        {"query": "fraud detection payment verification", "expected_api": "Adyen", "expected_type": "endpoint"},
+        {"query": "IoT device management telemetry", "expected_api": None, "expected_type": "overview"},
+        {"query": "API key management and rotation", "expected_api": None, "expected_type": "endpoint"},
+        {"query": "image recognition object detection", "expected_api": "Amazon Rekognition", "expected_type": "overview"},
     ]
 
     os.makedirs(os.path.dirname(GOLDEN_DATASET_PATH), exist_ok=True)

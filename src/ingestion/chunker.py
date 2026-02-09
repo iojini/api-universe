@@ -22,6 +22,8 @@ def extract_endpoints(spec):
     endpoints = []
 
     for path, methods in paths.items():
+        if not isinstance(methods, dict):
+            continue
         for method, details in methods.items():
             if method in ("get", "post", "put", "patch", "delete"):
                 endpoints.append({
