@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 from src.search.semantic_search import search
 from src.search.rag import ask
+from src.agents.search_agent import run_agent
 from src.api.auth import create_token, verify_token
 
 load_dotenv()
@@ -24,6 +25,10 @@ class SearchRequest(BaseModel):
 class AskRequest(BaseModel):
     query: str
     top_k: int = 5
+
+
+class AgentRequest(BaseModel):
+    query: str
 
 
 class TokenRequest(BaseModel):
@@ -61,6 +66,17 @@ def search_endpoint(request: SearchRequest, user_id: str = Depends(verify_token)
 def ask_endpoint(request: AskRequest, user_id: str = Depends(verify_token)):
     start = time.time()
     result = ask(request.query, top_k=request.top_k)
+    latency = time.time() - start
+    result["user"] = user_id
+    result["latency_ms"] = round(latency * 1000)
+
+    return result
+
+
+@app.post("/agent")
+def agent_endpoint(request: AgentRequest, user_id: str = Depends(verify_token)):
+    start = time.time()
+    result = run_agent(request.query)
     latency = time.time() - start
     result["user"] = user_id
     result["latency_ms"] = round(latency * 1000)
