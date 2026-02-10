@@ -8,6 +8,7 @@ from src.search.rag import ask
 from src.agents.search_agent import run_agent
 from src.llm.router import router as llm_router
 from src.api.auth import create_token, verify_token
+from fastapi.middleware.cors import CORSMiddleware
 
 load_dotenv()
 
@@ -15,6 +16,14 @@ app = FastAPI(
     title="API Universe",
     description="AI-powered semantic search for API discovery",
     version="0.1.0",
+)
+
+app.add_middleware(                                  
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Track query metrics
