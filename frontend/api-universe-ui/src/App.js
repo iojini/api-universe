@@ -1,4 +1,7 @@
 import { useState, useEffect, useRef } from "react";
+import axios from "axios";
+
+const API_URL = "http://127.0.0.1:8000";
 
 const FONTS_CSS = `
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800;900&family=DM+Sans:wght@300;400;500;600;700&display=swap');
@@ -496,8 +499,10 @@ function SearchView({ onSearch, view }) {
   );
 }
 
-function ResultsView({ query, onBack }) {
+function ResultsView({ query, onBack, liveResults, liveLatency }) {
   const [showTrace, setShowTrace] = useState(true);
+  const results = liveResults || SAMPLE_RESULTS;
+  const latency = liveLatency ? (liveLatency / 1000).toFixed(2) + "s" : "1.92s";
 
   return (
     <div style={{ display: "flex", gap: 24, animation: "fadeIn 0.4s ease" }}>
@@ -510,11 +515,11 @@ function ResultsView({ query, onBack }) {
           }}>← New search</button>
           <SearchView onSearch={() => {}} view="results" />
           <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 10, fontFamily: "'JetBrains Mono', monospace" }}>
-            3 results · 1.92s · <span style={{ color: "var(--accent-cyan)" }}>94% grounding score</span>
+            {results.length} results · {latency} {liveResults && <span>· <span style={{ color: "var(--accent-cyan)" }}>live from FAISS + cross-encoder</span></span>}
           </div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {SAMPLE_RESULTS.map((r, i) => <ResultCard key={r.name} result={r} index={i} />)}
+          {results.map((r, i) => <ResultCard key={r.name + i} result={r} index={i} />)}
         </div>
       </div>
 
@@ -677,6 +682,17 @@ function ObservabilityView() {
 export default function APIUniverse() {
   const [view, setView] = useState("search");
   const [query, setQuery] = useState("");
+  const [token, setToken] = useState("");
+  const [liveResults, setLiveResults] = useState(null);
+  const [liveLatency, setLiveLatency] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    axios.post(API_URL + "/token", { user_id: "demo-user" })
+      .then(res => setToken(res.data.access_token))
+      .catch(() => setError("Cannot connect to backend API"));
+  }, []);
 
   const tabs = [
     { id: "search", label: "Search", icon: <SearchIcon /> },
@@ -685,9 +701,33 @@ export default function APIUniverse() {
     { id: "observability", label: "Observability", icon: <ActivityIcon /> },
   ];
 
-  const handleSearch = (q) => {
+  const handleSearch = async (q) => {
+    if (!q || !q.trim() || !token) return;
     setQuery(q);
-    setView("results");
+    setLoading(true);
+    setError("");
+    try {
+      const res = await axios.post(API_URL + "/search", { query: q, top_k: 5 }, {
+        headers: { Authorization: "Bearer " + token }
+      });
+      const transformed = res.data.results.map(r => ({
+        name: r.metadata.api_name || "Unknown API",
+        category: r.metadata.type || "API",
+        score: r.rerank_score !== undefined ? Math.max(0, Math.min(1, (r.rerank_score + 12) / 16)) : r.score,
+        auth: r.metadata.method ? r.metadata.method + " " + (r.metadata.path || "") : "REST",
+        pricing: r.rerank_score !== undefined ? "rerank: " + r.rerank_score.toFixed(2) : "sim: " + r.score.toFixed(3),
+        description: r.text.substring(0, 300) + (r.text.length > 300 ? "..." : ""),
+        endpoints: r.metadata.path ? [r.metadata.method + " " + r.metadata.path] : [],
+        tags: r.metadata.tags || [],
+        citations: 0,
+      }));
+      setLiveResults(transformed);
+      setLiveLatency(res.data.latency_ms);
+      setView("results");
+    } catch (e) {
+      setError(e.response?.data?.detail || "Search failed. Is the backend running?");
+    }
+    setLoading(false);
   };
 
   return (
@@ -735,7 +775,7 @@ export default function APIUniverse() {
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          <Pill color="var(--accent-green)" filled>5,247 APIs indexed</Pill>
+          <Pill color="var(--accent-green)" filled>2,529 APIs indexed</Pill>
           <div style={{
             width: 32, height: 32, borderRadius: "50%",
             background: "linear-gradient(135deg, var(--accent-blue), var(--accent-purple))",
@@ -745,10 +785,13 @@ export default function APIUniverse() {
         </div>
       </nav>
 
+      {error && <div style={{ padding: "10px 32px", background: "var(--accent-red-dim)", color: "var(--accent-red)", fontSize: 13 }}>{error}</div>}
+      {loading && <div style={{ padding: "10px 32px", background: "var(--accent-blue-dim)", color: "var(--accent-blue)", fontSize: 13, animation: "pulse 1.5s infinite" }}>Searching 125,655 vectors...</div>}
+
       {/* CONTENT */}
       <main style={{ maxWidth: 1200, margin: "0 auto", padding: view === "search" ? "0" : "32px 32px 60px" }}>
         {view === "search" && <SearchView onSearch={handleSearch} view="search" />}
-        {view === "results" && <ResultsView query={query} onBack={() => setView("search")} />}
+        {view === "results" && <ResultsView query={query} onBack={() => setView("search")} liveResults={liveResults} liveLatency={liveLatency} />}
         {view === "compare" && <CompareView />}
         {view === "observability" && <ObservabilityView />}
       </main>
