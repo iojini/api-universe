@@ -99,14 +99,13 @@ uvicorn src.api.main:app --reload --port 8000
 
 ## Evaluation Results
 
-| Metric | Score |
-|--------|-------|
-| Avg Precision@5 | 0.486 |
-| Avg Precision@3 | 0.619 |
-| Hit Rate@3 | 0.75 |
-| Avg Latency | 513ms |
+| Stage | Specs | Vectors | Precision@5 | Hit Rate@3 | Avg Latency |
+|-------|-------|---------|-------------|------------|-------------|
+| Baseline (no rerank) | 100 | 2,705 | 0.486 | 0.75 | 513ms |
+| + Re-ranking | 500 | 16,877 | 0.56 | 0.70 | 2,225ms |
+| Full scale | 2,529 | 125,655 | **0.738** | **0.80** | 2,378ms |
 
-*Baseline on 100 API specs. Improves significantly with scale and re-ranking.*
+*52% Precision@5 improvement from baseline to full scale through cross-encoder re-ranking, dataset scaling, and adaptive chunking.*
 
 ---
 
