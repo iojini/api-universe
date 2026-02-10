@@ -49,4 +49,4 @@ def download_specs(limit=100):
 
 
 if __name__ == "__main__":
-    download_specs(limit=500)
+    download_specs(limit=3000)

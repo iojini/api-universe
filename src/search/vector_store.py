@@ -3,22 +3,28 @@ import json
 import numpy as np
 import faiss
 
-EMBEDDINGS_PATH = "data/processed/chunks_with_embeddings.json"
+EMBEDDINGS_PATH = "data/processed/embeddings.npy"
+CHUNKS_PATH = "data/processed/chunks.json"
 INDEX_PATH = "data/processed/faiss_index.bin"
 METADATA_PATH = "data/processed/metadata.json"
 
 
 def build_index():
-    with open(EMBEDDINGS_PATH, "r") as f:
+    embeddings = np.load(EMBEDDINGS_PATH)
+    print(f"Loaded embeddings: {embeddings.shape}")
+
+    with open(CHUNKS_PATH, "r") as f:
         chunks = json.load(f)
 
-    print(f"Building FAISS index from {len(chunks)} chunks...")
+    count = min(len(chunks), embeddings.shape[0])
+    embeddings = embeddings[:count]
+    chunks = chunks[:count]
 
-    embeddings = np.array([c["embedding"] for c in chunks], dtype="float32")
+    print(f"Building FAISS index from {count} vectors...")
+
     dimension = embeddings.shape[1]
-
-    index = faiss.IndexFlatIP(dimension)
     faiss.normalize_L2(embeddings)
+    index = faiss.IndexFlatIP(dimension)
     index.add(embeddings)
 
     faiss.write_index(index, INDEX_PATH)
