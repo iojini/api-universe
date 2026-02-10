@@ -1,16 +1,2 @@
-cat > pyproject.toml << 'EOF'
-[project]
-name = "api-universe"
-version = "0.1.0"
-requires-python = ">=3.12"
-
-[build-system]
-requires = ["setuptools>=68.0"]
-build-backend = "setuptools.backends._legacy:_Backend"
-
-[tool.setuptools.packages.find]
-include = ["src*"]
-
 [tool.pytest.ini_options]
 pythonpath = ["."]
-EOF

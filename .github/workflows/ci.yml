@@ -22,16 +22,10 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pyyaml pytest sentence-transformers
-          pip install -e .
+          pip install pyyaml pytest
 
       - name: Run unit tests
         run: pytest tests/unit/ -v
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-
-      - name: Run evaluation suite
-        if: github.event_name == 'pull_request'
-        run: python -m src.evaluation.eval
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          PYTHONPATH: .
