@@ -518,7 +518,7 @@ function SearchView({ onSearch, onAgent, view }) {
   );
 }
 
-function ResultsView({ query, onBack, liveResults, liveLatency, onSearch }) {
+function ResultsView({ query, onBack, liveResults, liveLatency, onSearch, onCompare, comparing }) {
   const [showTrace, setShowTrace] = useState(true);
   const results = liveResults || SAMPLE_RESULTS;
   const latency = liveLatency ? (liveLatency / 1000).toFixed(2) + "s" : "1.92s";
@@ -533,8 +533,29 @@ function ResultsView({ query, onBack, liveResults, liveLatency, onSearch }) {
             display: "flex", alignItems: "center", gap: 6, marginBottom: 14,
           }}>← New search</button>
           <SearchView onSearch={onSearch} onAgent={onSearch} view="results" />
-          <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 10, fontFamily: "'JetBrains Mono', monospace" }}>
-            {results.length} results · {latency} {liveResults && <span>· <span style={{ color: "var(--accent-cyan)" }}>live from FAISS + cross-encoder</span></span>}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10 }}>
+            <div style={{ fontSize: 12, color: "var(--text-secondary)", fontFamily: "'JetBrains Mono', monospace" }}>
+              {results.length} results · {latency} {liveResults && <span>· <span style={{ color: "var(--accent-cyan)" }}>live from FAISS + cross-encoder</span></span>}
+            </div>
+            {onCompare && liveResults && (
+              <button
+                onClick={onCompare}
+                disabled={comparing}
+                style={{
+                  background: comparing ? "var(--bg-elevated)" : "var(--accent-purple)",
+                  border: "none", borderRadius: 8,
+                  padding: "8px 18px",
+                  color: comparing ? "var(--text-secondary)" : "#fff",
+                  fontSize: 13, fontWeight: 600, cursor: comparing ? "wait" : "pointer",
+                  display: "flex", alignItems: "center", gap: 8,
+                  transition: "all 0.2s ease",
+                  fontFamily: "'DM Sans', sans-serif",
+                  opacity: comparing ? 0.6 : 1,
+                }}
+              >
+                {comparing ? "Comparing..." : "Compare these results"} <ArrowIcon />
+              </button>
+            )}
           </div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -606,7 +627,7 @@ function CompareView({ agentResult, agentLoading }) {
                 <div style={{ display: "flex", gap: 8, marginBottom: 4 }}>
                   <Pill color="var(--accent-purple)">{agentResult.query_type || "agent"}</Pill>
                   {agentResult.retries > 0 && <Pill color="var(--accent-amber)">Self-corrected</Pill>}
-                  <Pill color="var(--accent-cyan)">{agentResult.latency_ms}ms</Pill>
+                  <Pill color="var(--accent-cyan)">{(agentResult.latency_ms / 1000).toFixed(1)}s</Pill>
                 </div>
               </div>
               <div style={{
@@ -707,7 +728,7 @@ function CompareView({ agentResult, agentLoading }) {
                 fontSize: 11, fontFamily: "'JetBrains Mono', monospace", color: "var(--text-secondary)",
                 display: "flex", justifyContent: "space-between",
               }}>
-                <span>Total: {agentResult.latency_ms}ms</span>
+                <span>Total: {(agentResult.latency_ms / 1000).toFixed(1)}s</span>
                 <span>{agentResult.retries > 0 ? "retried " + agentResult.retries + "x" : "first pass"}</span>
               </div>
             </div>
@@ -908,6 +929,24 @@ export default function APIUniverse() {
     setLoading(false);
   };
 
+  const handleCompare = async () => {
+    if (!liveResults || !liveResults.length || !token) return;
+    const apiNames = [...new Set(liveResults.map(r => r.name))].slice(0, 5);
+    const compareQuery = "Compare " + apiNames.join(", ") + " for: " + query;
+    setLoading(true);
+    setError("");
+    try {
+      const res = await axios.post(API_URL + "/agent", { query: compareQuery }, {
+        headers: { Authorization: "Bearer " + token }
+      });
+      setAgentResult(res.data);
+      setView("compare");
+    } catch (e) {
+      setError(e.response?.data?.detail || "Agent failed. Is the backend running?");
+    }
+    setLoading(false);
+  };
+
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg-primary)", color: "var(--text-primary)" }}>
       <style>{FONTS_CSS}</style>
@@ -969,7 +1008,7 @@ export default function APIUniverse() {
       {/* CONTENT */}
       <main style={{ maxWidth: 1200, margin: "0 auto", padding: view === "search" ? "0" : "32px 32px 60px" }}>
         {view === "search" && <SearchView onSearch={handleSearch} onAgent={handleAgent} view="search" />}
-        {view === "results" && <ResultsView query={query} onBack={() => setView("search")} liveResults={liveResults} liveLatency={liveLatency} onSearch={handleSearch} />}
+        {view === "results" && <ResultsView query={query} onBack={() => setView("search")} liveResults={liveResults} liveLatency={liveLatency} onSearch={handleSearch} onCompare={handleCompare} comparing={loading} />}
         {view === "compare" && <CompareView agentResult={agentResult} agentLoading={loading} />}
         {view === "observability" && <ObservabilityView />}
       </main>
