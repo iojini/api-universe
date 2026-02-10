@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import axios from "axios";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 const API_URL = "http://127.0.0.1:8000";
 
@@ -386,7 +388,7 @@ function MiniChart({ data, color, height = 40, width = 120 }) {
 
 // ─── VIEWS ──────────────────────────────────────
 
-function SearchView({ onSearch, view }) {
+function SearchView({ onSearch, onAgent, view }) {
   const [query, setQuery] = useState("");
   const inputRef = useRef(null);
   const isHome = view === "search";
@@ -468,6 +470,23 @@ function SearchView({ onSearch, view }) {
           >
             Search <ArrowIcon />
           </button>
+          {onAgent && (
+            <button
+              onClick={() => { if (query.trim()) onAgent(query); }}
+              style={{
+                background: query.trim() ? "var(--accent-purple)" : "var(--bg-elevated)",
+                border: "none", borderRadius: isHome ? 14 : 8,
+                padding: isHome ? "10px 20px" : "8px 16px",
+                color: query.trim() ? "#fff" : "var(--text-secondary)",
+                fontSize: 13, fontWeight: 600, cursor: query.trim() ? "pointer" : "default",
+                display: "flex", alignItems: "center", gap: 6,
+                transition: "all 0.2s ease",
+                fontFamily: "'DM Sans', sans-serif",
+              }}
+            >
+              Compare <ArrowIcon />
+            </button>
+          )}
         </div>
       </div>
 
@@ -513,7 +532,7 @@ function ResultsView({ query, onBack, liveResults, liveLatency, onSearch }) {
             fontSize: 13, cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
             display: "flex", alignItems: "center", gap: 6, marginBottom: 14,
           }}>← New search</button>
-          <SearchView onSearch={onSearch} view="results" />
+          <SearchView onSearch={onSearch} onAgent={onSearch} view="results" />
           <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 10, fontFamily: "'JetBrains Mono', monospace" }}>
             {results.length} results · {latency} {liveResults && <span>· <span style={{ color: "var(--accent-cyan)" }}>live from FAISS + cross-encoder</span></span>}
           </div>
@@ -559,21 +578,157 @@ function ResultsView({ query, onBack, liveResults, liveLatency, onSearch }) {
   );
 }
 
-function CompareView() {
+function CompareView({ agentResult, agentLoading }) {
   return (
     <div style={{ animation: "fadeIn 0.4s ease" }}>
-      <div style={{ marginBottom: 24 }}>
-        <h2 style={{ fontFamily: "'Outfit', sans-serif", fontSize: 22, fontWeight: 700, marginBottom: 6, letterSpacing: "-0.02em" }}>
-          API Comparison
-        </h2>
-        <p style={{ fontSize: 13, color: "var(--text-secondary)" }}>
-          "Compare payment APIs with recurring billing, sandbox, and under 3% fees"
-        </p>
-        <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 6, fontFamily: "'JetBrains Mono', monospace" }}>
-          <span style={{ color: "var(--accent-purple)" }}>Multi-step agent</span> · 3 sub-queries · 4 APIs compared · 2.4s
+      {agentLoading && (
+        <div style={{
+          background: "var(--bg-secondary)", border: "1px solid var(--accent-purple)33",
+          borderRadius: "var(--radius-lg)", padding: "48px", textAlign: "center", marginBottom: 32,
+        }}>
+          <div style={{ fontSize: 15, color: "var(--accent-purple)", animation: "pulse 1.5s infinite", fontFamily: "'JetBrains Mono', monospace", marginBottom: 8 }}>
+            Agent reasoning...
+          </div>
+          <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+            Decomposing query \u2192 Searching sub-queries \u2192 Cross-encoder reranking \u2192 Generating answer \u2192 Grounding check
+          </div>
         </div>
-      </div>
-      <ComparisonTable />
+      )}
+
+      {agentResult && !agentLoading && (
+        <div style={{ marginBottom: 40, animation: "fadeInUp 0.5s ease both" }}>
+          <div style={{ display: "flex", gap: 24 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ marginBottom: 16 }}>
+                <h2 style={{ fontFamily: "'Outfit', sans-serif", fontSize: 22, fontWeight: 700, marginBottom: 6, letterSpacing: "-0.02em" }}>
+                  Agent Answer
+                </h2>
+                <div style={{ display: "flex", gap: 8, marginBottom: 4 }}>
+                  <Pill color="var(--accent-purple)">{agentResult.query_type || "agent"}</Pill>
+                  {agentResult.retries > 0 && <Pill color="var(--accent-amber)">Self-corrected</Pill>}
+                  <Pill color="var(--accent-cyan)">{agentResult.latency_ms}ms</Pill>
+                </div>
+              </div>
+              <div style={{
+                background: "var(--bg-secondary)", border: "1px solid var(--border-subtle)",
+                borderRadius: "var(--radius-lg)", padding: "24px", marginBottom: 16,
+              }}>
+                <div className="agent-markdown" style={{ fontSize: 14, lineHeight: 1.8, color: "var(--text-primary)" }}>
+                  <style>{`
+                    .agent-markdown table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13px; background: var(--bg-secondary); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); overflow: hidden; }
+                    .agent-markdown th { background: var(--bg-tertiary); color: var(--text-primary); font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 14px; padding: 16px 20px; text-align: center; border-bottom: 1px solid var(--border-subtle); }
+                    .agent-markdown th:first-child { text-align: left; color: var(--text-secondary); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }
+                    .agent-markdown th:nth-child(2) { color: var(--accent-cyan); background: rgba(0, 212, 170, 0.06); }
+                    .agent-markdown td { padding: 14px 20px; text-align: center; border-bottom: 1px solid var(--border-subtle); color: var(--text-secondary); font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+                    .agent-markdown td:first-child { text-align: left; font-family: 'DM Sans', sans-serif; font-weight: 500; color: var(--text-secondary); }
+                    .agent-markdown td:nth-child(2) { background: rgba(0, 212, 170, 0.06); }
+                    .agent-markdown tr:hover { background: var(--bg-tertiary); }
+                    .agent-markdown tr:hover td:nth-child(2) { background: rgba(0, 212, 170, 0.1); }
+                    .agent-markdown h2 { font-family: 'Outfit', sans-serif; font-size: 20px; font-weight: 700; margin: 28px 0 14px; letter-spacing: -0.02em; color: var(--text-primary); }
+                    .agent-markdown h3 { font-family: 'Outfit', sans-serif; font-size: 16px; font-weight: 600; margin: 22px 0 10px; color: var(--text-primary); }
+                    .agent-markdown strong { color: var(--accent-cyan); font-weight: 600; }
+                    .agent-markdown hr { border: none; border-top: 1px solid var(--border-subtle); margin: 24px 0; }
+                    .agent-markdown ul, .agent-markdown ol { padding-left: 20px; margin: 10px 0; }
+                    .agent-markdown li { margin: 6px 0; color: var(--text-secondary); line-height: 1.6; }
+                    .agent-markdown li strong { color: var(--accent-cyan); }
+                    .agent-markdown p { margin: 10px 0; line-height: 1.7; }
+                    .agent-markdown a { color: var(--accent-blue); text-decoration: none; }
+                  `}</style>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{agentResult.answer}</ReactMarkdown>
+                </div>
+              </div>
+              <div style={{
+                background: "var(--bg-secondary)", border: "1px solid var(--border-subtle)",
+                borderRadius: "var(--radius-lg)", padding: "20px",
+              }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>Grounding Verification</span>
+                  <span style={{
+                    fontSize: 22, fontWeight: 700, fontFamily: "'Outfit', sans-serif",
+                    color: agentResult.grounding.score > 0.7 ? "var(--accent-green)" : agentResult.grounding.score > 0.4 ? "var(--accent-amber)" : "var(--accent-red)",
+                  }}>{(agentResult.grounding.score * 100).toFixed(0)}%</span>
+                </div>
+                <div style={{ height: 8, background: "var(--bg-tertiary)", borderRadius: 4, overflow: "hidden", marginBottom: 12 }}>
+                  <div style={{
+                    height: "100%", borderRadius: 4, transition: "width 0.5s",
+                    width: (agentResult.grounding.score * 100) + "%",
+                    background: agentResult.grounding.score > 0.7 ? "var(--accent-green)" : agentResult.grounding.score > 0.4 ? "var(--accent-amber)" : "var(--accent-red)",
+                  }} />
+                </div>
+                <div style={{ fontSize: 11, color: "var(--text-secondary)", fontFamily: "'JetBrains Mono', monospace", marginBottom: 12 }}>
+                  {agentResult.grounding.supported}/{agentResult.grounding.total} claims verified against source documents
+                </div>
+                {agentResult.grounding.claims && agentResult.grounding.claims.map((c, i) => (
+                  <div key={i} style={{
+                    display: "flex", gap: 8, alignItems: "flex-start", fontSize: 12,
+                    padding: "8px 12px", borderRadius: "var(--radius-sm)", marginBottom: 4,
+                    background: c.status === "SUPPORTED" ? "var(--accent-green-dim)" : c.status === "UNSUPPORTED" ? "var(--accent-red-dim)" : "var(--accent-amber-dim)",
+                    animation: "fadeIn 0.3s ease " + (i * 0.05) + "s both",
+                  }}>
+                    {c.status === "SUPPORTED" ? <CheckIcon /> : c.status === "UNSUPPORTED" ? <XIcon /> : <AlertIcon />}
+                    <span style={{ color: "var(--text-secondary)", lineHeight: 1.5 }}>{c.claim}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div style={{
+              width: 300, flexShrink: 0, background: "var(--bg-secondary)",
+              border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-lg)",
+              padding: "20px", alignSelf: "flex-start", position: "sticky", top: 84,
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                <h3 style={{ fontSize: 13, fontWeight: 700, fontFamily: "'Outfit', sans-serif", display: "flex", alignItems: "center", gap: 8 }}>
+                  <ActivityIcon /> Agent Trace
+                </h3>
+                <Pill color="var(--accent-purple)">Live</Pill>
+              </div>
+              {agentResult.trace && agentResult.trace.map((step, i) => (
+                <div key={i} style={{ display: "flex", gap: 12, marginBottom: 14, animation: "fadeInUp 0.4s ease " + (i * 0.12) + "s both" }}>
+                  <div style={{
+                    width: 26, height: 26, borderRadius: "50%", flexShrink: 0,
+                    background: "var(--accent-purple-dim)", border: "2px solid var(--accent-purple)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}><CheckIcon /></div>
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-primary)" }}>{step.step}</div>
+                    <div style={{ fontSize: 11, color: "var(--text-secondary)", fontFamily: "'JetBrains Mono', monospace", marginTop: 2 }}>
+                      {step.result && typeof step.result === "string" && step.result}
+                      {step.grounding_score !== undefined && "Score: " + (step.grounding_score * 100).toFixed(0) + "%"}
+                      {step.total_results !== undefined && step.total_results + " results"}
+                      {step.tokens !== undefined && step.tokens + " tokens"}
+                      {step.reason && step.reason}
+                      {step.refined_queries && step.refined_queries.join(", ")}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              <div style={{
+                marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border-subtle)",
+                fontSize: 11, fontFamily: "'JetBrains Mono', monospace", color: "var(--text-secondary)",
+                display: "flex", justifyContent: "space-between",
+              }}>
+                <span>Total: {agentResult.latency_ms}ms</span>
+                <span>{agentResult.retries > 0 ? "retried " + agentResult.retries + "x" : "first pass"}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!agentResult && !agentLoading && (
+        <div style={{ marginBottom: 24 }}>
+          <h2 style={{ fontFamily: "'Outfit', sans-serif", fontSize: 22, fontWeight: 700, marginBottom: 6, letterSpacing: "-0.02em" }}>
+            API Comparison
+          </h2>
+          <p style={{ fontSize: 13, color: "var(--text-secondary)" }}>
+            "Compare payment APIs with recurring billing, sandbox, and under 3% fees"
+          </p>
+          <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 6, fontFamily: "'JetBrains Mono', monospace" }}>
+            <span style={{ color: "var(--accent-purple)" }}>Multi-step agent</span> {"\u00b7"} 3 sub-queries {"\u00b7"} 4 APIs compared {"\u00b7"} 2.4s
+          </div>
+        </div>
+      )}
+      {!agentResult && !agentLoading && <ComparisonTable />}
     </div>
   );
 }
@@ -691,6 +846,7 @@ export default function APIUniverse() {
   const [liveResults, setLiveResults] = useState(null);
   const [liveLatency, setLiveLatency] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [agentResult, setAgentResult] = useState(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -731,6 +887,23 @@ export default function APIUniverse() {
       setView("results");
     } catch (e) {
       setError(e.response?.data?.detail || "Search failed. Is the backend running?");
+    }
+    setLoading(false);
+  };
+
+  const handleAgent = async (q) => {
+    if (!q || !q.trim() || !token) return;
+    setQuery(q);
+    setLoading(true);
+    setError("");
+    try {
+      const res = await axios.post(API_URL + "/agent", { query: q }, {
+        headers: { Authorization: "Bearer " + token }
+      });
+      setAgentResult(res.data);
+      setView("compare");
+    } catch (e) {
+      setError(e.response?.data?.detail || "Agent failed. Is the backend running?");
     }
     setLoading(false);
   };
@@ -795,9 +968,9 @@ export default function APIUniverse() {
 
       {/* CONTENT */}
       <main style={{ maxWidth: 1200, margin: "0 auto", padding: view === "search" ? "0" : "32px 32px 60px" }}>
-        {view === "search" && <SearchView onSearch={handleSearch} view="search" />}
+        {view === "search" && <SearchView onSearch={handleSearch} onAgent={handleAgent} view="search" />}
         {view === "results" && <ResultsView query={query} onBack={() => setView("search")} liveResults={liveResults} liveLatency={liveLatency} onSearch={handleSearch} />}
-        {view === "compare" && <CompareView />}
+        {view === "compare" && <CompareView agentResult={agentResult} agentLoading={loading} />}
         {view === "observability" && <ObservabilityView />}
       </main>
     </div>

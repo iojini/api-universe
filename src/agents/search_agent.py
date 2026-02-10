@@ -115,10 +115,18 @@ def generate(state: AgentState) -> AgentState:
     system = """You are API Universe, an AI-powered API discovery assistant.
 Rules:
 - Only use information from the provided search results.
-- Cite which source each claim comes from.
-- For comparisons, use structured tables.
+- Cite which source each claim comes from using [Source N].
 - Be honest when information is missing.
-- Be concise and practical."""
+- Be concise and practical.
+
+For COMPARISON queries, use this exact format:
+1. One intro sentence.
+2. A markdown table with EXACTLY these 4 columns: | API | Key Capability | Support | Notes |
+   - Keep each cell under 8 words.
+   - Use Yes/No/Partial for the Support column.
+3. A final section starting with **Recommendation:** giving a clear pick with caveats.
+
+Do NOT include source numbers, endpoints, or URLs in the table. Keep it scannable."""
 
     messages = [
         {"role": "system", "content": system},
