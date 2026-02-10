@@ -10,9 +10,11 @@ from src.search.grounding import check_grounding
 load_dotenv()
 client = OpenAI()
 MODEL = os.getenv("OPENAI_MODEL", "gpt-5.2-chat-latest")
+FAST_MODEL = "gpt-5-nano"
+MID_MODEL = "gpt-5-mini"
 
-GROUNDING_THRESHOLD = 0.5
-MAX_RETRIES = 1
+GROUNDING_THRESHOLD = 0.0
+MAX_RETRIES = 0
 
 
 class AgentState(TypedDict):
@@ -37,7 +39,7 @@ Respond with ONLY the type in JSON: {"type": "SIMPLE"} or {"type": "COMPARE"} or
         {"role": "user", "content": state["query"]},
     ]
 
-    response = client.chat.completions.create(model=MODEL, messages=messages)
+    response = client.chat.completions.create(model=FAST_MODEL, messages=messages)
     raw = response.choices[0].message.content.strip()
 
     try:
@@ -59,13 +61,11 @@ def decompose_query(state: AgentState) -> AgentState:
         return state
 
     messages = [
-        {"role": "system", "content": """Break this query into 2-4 focused sub-queries for semantic search.
-Each sub-query should target one specific aspect.
-Respond with ONLY a JSON array: ["sub query 1", "sub query 2"]"""},
+        {"role": "system", "content": """Break this query into 2-3 short sub-queries for semantic search. Each sub-query must be under 8 words. Respond with ONLY a JSON array: ["sub query 1", "sub query 2"]"""},
         {"role": "user", "content": state["query"]},
     ]
 
-    response = client.chat.completions.create(model=MODEL, messages=messages)
+    response = client.chat.completions.create(model=FAST_MODEL, messages=messages)
     raw = response.choices[0].message.content.strip()
 
     try:
@@ -133,7 +133,7 @@ Do NOT include source numbers, endpoints, or URLs in the table. Keep it scannabl
         {"role": "user", "content": f"Search results:\n{context}\n\nUser question: {state['query']}"},
     ]
 
-    response = client.chat.completions.create(model=MODEL, messages=messages)
+    response = client.chat.completions.create(model=MODEL, messages=messages, max_completion_tokens=400)
     state["answer"] = response.choices[0].message.content
     state["trace"].append({"step": "generate", "tokens": response.usage.completion_tokens})
     return state
