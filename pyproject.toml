@@ -1,0 +1,8 @@
+cat > pyproject.toml << 'EOF'
+[project]
+name = "api-universe"
+version = "0.1.0"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+EOF
