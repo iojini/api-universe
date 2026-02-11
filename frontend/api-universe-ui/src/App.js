@@ -638,21 +638,22 @@ function CompareView({ agentResult, agentLoading }) {
                   <style>{`
                     .agent-markdown table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13px; background: var(--bg-secondary); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); overflow: hidden; }
                     .agent-markdown th { background: var(--bg-tertiary); color: var(--text-primary); font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 14px; padding: 16px 20px; text-align: center; border-bottom: 1px solid var(--border-subtle); }
-                    .agent-markdown th:first-child { text-align: left; color: var(--text-secondary); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }
-                    .agent-markdown th:nth-child(2) { color: var(--accent-cyan); background: rgba(0, 212, 170, 0.06); }
+                    .agent-markdown th:first-child { text-align: center; }
+                    .agent-markdown th:nth-child(2) { background: rgba(0, 212, 170, 0.06); }
                     .agent-markdown td { padding: 14px 20px; text-align: center; border-bottom: 1px solid var(--border-subtle); color: var(--text-secondary); font-family: 'JetBrains Mono', monospace; font-size: 12px; }
-                    .agent-markdown td:first-child { text-align: left; font-family: 'DM Sans', sans-serif; font-weight: 500; color: var(--text-secondary); }
+                    .agent-markdown td:first-child { text-align: center; font-weight: 700; }
                     .agent-markdown td:nth-child(2) { background: rgba(0, 212, 170, 0.06); }
                     .agent-markdown tr:hover { background: var(--bg-tertiary); }
                     .agent-markdown tr:hover td:nth-child(2) { background: rgba(0, 212, 170, 0.1); }
                     .agent-markdown h2 { font-family: 'Outfit', sans-serif; font-size: 20px; font-weight: 700; margin: 28px 0 14px; letter-spacing: -0.02em; color: var(--text-primary); }
                     .agent-markdown h3 { font-family: 'Outfit', sans-serif; font-size: 16px; font-weight: 600; margin: 22px 0 10px; color: var(--text-primary); }
-                    .agent-markdown strong { color: var(--accent-cyan); font-weight: 600; }
+                    .agent-markdown strong { color: var(--text-primary); font-weight: 700; }
                     .agent-markdown hr { border: none; border-top: 1px solid var(--border-subtle); margin: 24px 0; }
                     .agent-markdown ul, .agent-markdown ol { padding-left: 20px; margin: 10px 0; }
                     .agent-markdown li { margin: 6px 0; color: var(--text-secondary); line-height: 1.6; }
                     .agent-markdown li strong { color: var(--accent-cyan); }
                     .agent-markdown p { margin: 10px 0; line-height: 1.7; }
+                    .agent-markdown p:last-child strong:first-child { color: var(--accent-cyan); }
                     .agent-markdown a { color: var(--accent-blue); text-decoration: none; }
                   `}</style>
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>{agentResult.answer}</ReactMarkdown>
