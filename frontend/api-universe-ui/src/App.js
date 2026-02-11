@@ -739,104 +739,183 @@ function CompareView({ agentResult, agentLoading }) {
   );
 }
 
-function ObservabilityView() {
-  const chartData1 = [85, 86.5, 87, 86.8, 88, 87.5, 88.5, 89, 89.2];
-  const chartData2 = [5.1, 4.8, 4.2, 4.0, 3.8, 3.5, 3.4, 3.3, 3.2];
-  const chartData3 = [2.1, 2.0, 1.95, 2.05, 1.9, 1.88, 1.85, 1.83, 1.82];
+function ObservabilityView({ token }) {
+  const [metrics, setMetrics] = useState(null);
+
+  const fetchMetrics = async () => {
+    if (!token) return;
+    try {
+      const res = await axios.get(API_URL + "/metrics", {
+        headers: { Authorization: "Bearer " + token }
+      });
+      setMetrics(res.data);
+    } catch (e) {
+      console.error("Failed to fetch metrics", e);
+    }
+  };
+
+  useEffect(() => {
+    fetchMetrics();
+    const interval = setInterval(fetchMetrics, 30000);
+    return () => clearInterval(interval);
+  }, [token]);
+
+  if (!metrics) {
+    return (
+      <div style={{ animation: "fadeIn 0.4s ease", textAlign: "center", padding: 60 }}>
+        <div style={{ fontSize: 15, color: "var(--text-secondary)", animation: "pulse 1.5s infinite" }}>Loading metrics...</div>
+      </div>
+    );
+  }
+
+  const { summary, recent_runs, model_stats } = metrics;
+  const runs = recent_runs || [];
+  const stats = model_stats && model_stats[0] ? model_stats[0] : {};
+  const totalRuns = runs.length;
+  const nanoAvgMs = totalRuns > 0 ? runs.reduce((s, r) => s + ((r.classify_ms || 0) + (r.decompose_ms || 0)) / 2, 0) / totalRuns : 0;
+  const qualityAvgMs = totalRuns > 0 ? runs.reduce((s, r) => s + ((r.generate_ms || 0) + (r.verify_ms || 0)) / 2, 0) / totalRuns : 0;
+  const nanoCalls = (summary.total_queries || 0) * 2;
+  const qualityCalls = (summary.total_queries || 0) * 2;
+  const latencies = [...runs].reverse().map(r => r.latency_ms || 0);
+  const groundings = [...runs].reverse().map(r => r.grounding_score || 0);
+  const maxLatency = Math.max(...latencies, 1);
 
   return (
     <div style={{ animation: "fadeIn 0.4s ease" }}>
       <div style={{ marginBottom: 28 }}>
-        <h2 style={{ fontFamily: "'Outfit', sans-serif", fontSize: 22, fontWeight: 700, marginBottom: 6, letterSpacing: "-0.02em" }}>
-          System Observability
-        </h2>
+        <h2 style={{ fontFamily: "'Outfit', sans-serif", fontSize: 22, fontWeight: 700, marginBottom: 6, letterSpacing: "-0.02em" }}>System Observability</h2>
         <p style={{ fontSize: 13, color: "var(--text-secondary)" }}>
-          Live metrics from production · Last updated 12s ago
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--accent-green)", animation: "pulse 2s infinite", display: "inline-block" }} />
+            Live from SQLite
+          </span>
+          {" \u00b7 Auto-refreshes every 30s"}
         </p>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 28 }}>
-        {METRICS.map((m, i) => <MetricCard key={m.label} {...m} delay={i * 0.08} />)}
+        {[
+          { label: "Total Queries", value: summary.total_queries || 0, sub: "since server start", color: "var(--accent-blue)" },
+          { label: "Avg Latency", value: summary.avg_latency_ms ? (summary.avg_latency_ms / 1000).toFixed(1) + "s" : "0s", sub: "across all agent runs", color: "var(--accent-cyan)" },
+          { label: "Avg Grounding", value: summary.avg_grounding ? Math.round(summary.avg_grounding * 100) + "%" : "0%", sub: "claims verified", color: "var(--accent-green)" },
+          { label: "Total Tokens", value: (summary.total_tokens || 0).toLocaleString(), sub: "generated across runs", color: "var(--accent-amber)" },
+        ].map((card, i) => (
+          <div key={card.label} style={{
+            background: "var(--bg-secondary)", border: "1px solid var(--border-subtle)",
+            borderRadius: "var(--radius-lg)", padding: "20px 22px",
+            animation: "fadeInUp 0.5s ease " + (i * 0.08) + "s both",
+            position: "relative", overflow: "hidden",
+          }}>
+            <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: "linear-gradient(90deg, transparent, " + card.color + ", transparent)" }} />
+            <div style={{ fontSize: 12, color: "var(--text-secondary)", fontWeight: 500, marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.08em" }}>{card.label}</div>
+            <div style={{ fontSize: 28, fontWeight: 700, fontFamily: "'Outfit', sans-serif", color: card.color, letterSpacing: "-0.02em" }}>{card.value}</div>
+            <div style={{ fontSize: 12, fontWeight: 500, marginTop: 6, fontFamily: "'JetBrains Mono', monospace", color: "var(--text-secondary)" }}>{card.sub}</div>
+          </div>
+        ))}
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 28 }}>
-        <div style={{
-          background: "var(--bg-secondary)", border: "1px solid var(--border-subtle)",
-          borderRadius: "var(--radius-lg)", padding: "22px 24px",
-          animation: "fadeInUp 0.5s ease 0.3s both",
-        }}>
+        <div style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-lg)", padding: "22px 24px" }}>
           <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
-            <LayersIcon /> Precision@5 Trend
+            <ActivityIcon /> Latency Trend
+            <span style={{ marginLeft: "auto", fontSize: 11, fontFamily: "'JetBrains Mono', monospace", color: "var(--text-secondary)", fontWeight: 400 }}>{"last " + latencies.length + " runs"}</span>
           </h3>
-          <div style={{ display: "flex", alignItems: "flex-end", gap: 16 }}>
-            <MiniChart data={chartData1} color="var(--accent-cyan)" height={60} width={200} />
-            <div style={{ fontSize: 11, color: "var(--text-secondary)", fontFamily: "'JetBrains Mono', monospace" }}>
-              <div>Peak: 89.2%</div>
-              <div style={{ color: "var(--accent-green)", marginTop: 2 }}>↑ Steady climb</div>
+          <div style={{ position: "relative", paddingBottom: 24 }}>
+            <div style={{ height: 120, display: "flex", alignItems: "flex-end", gap: 8, paddingTop: 10 }}>
+              {latencies.map((ms, i) => {
+                const pct = maxLatency > 0 ? Math.max(8, (ms / maxLatency) * 100) : 8;
+                return (
+                  <div key={i} style={{ flex: 1, height: pct + "%", borderRadius: "4px 4px 0 0", background: "linear-gradient(to top, var(--accent-cyan), var(--accent-cyan)88)", position: "relative", minWidth: 0, transition: "all 0.3s" }}>
+                    <span style={{ position: "absolute", top: -18, left: "50%", transform: "translateX(-50%)", fontSize: 10, fontFamily: "'JetBrains Mono', monospace", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{(ms / 1000).toFixed(1) + "s"}</span>
+                    <span style={{ position: "absolute", bottom: -20, left: "50%", transform: "translateX(-50%)", fontSize: 9, fontFamily: "'JetBrains Mono', monospace", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{"#" + (i + 1)}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
-        <div style={{
-          background: "var(--bg-secondary)", border: "1px solid var(--border-subtle)",
-          borderRadius: "var(--radius-lg)", padding: "22px 24px",
-          animation: "fadeInUp 0.5s ease 0.4s both",
-        }}>
+
+        <div style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-lg)", padding: "22px 24px" }}>
           <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
-            <AlertIcon /> Hallucination Rate
+            <ShieldIcon /> Grounding Score Trend
+            <span style={{ marginLeft: "auto", fontSize: 11, fontFamily: "'JetBrains Mono', monospace", color: "var(--text-secondary)", fontWeight: 400 }}>{"last " + groundings.length + " runs"}</span>
           </h3>
-          <div style={{ display: "flex", alignItems: "flex-end", gap: 16 }}>
-            <MiniChart data={chartData2} color="var(--accent-amber)" height={60} width={200} />
-            <div style={{ fontSize: 11, color: "var(--text-secondary)", fontFamily: "'JetBrains Mono', monospace" }}>
-              <div>Current: 3.2%</div>
-              <div style={{ color: "var(--accent-green)", marginTop: 2 }}>↓ Improving</div>
+          <div style={{ position: "relative", paddingBottom: 24 }}>
+            <div style={{ height: 120, display: "flex", alignItems: "flex-end", gap: 8, paddingTop: 10 }}>
+              {groundings.map((score, i) => {
+                const pct = Math.max(8, score * 100);
+                const barColor = score >= 0.7 ? "var(--accent-green)" : "var(--accent-amber)";
+                return (
+                  <div key={i} style={{ flex: 1, height: pct + "%", borderRadius: "4px 4px 0 0", background: "linear-gradient(to top, " + barColor + ", " + barColor + "88)", position: "relative", minWidth: 0, transition: "all 0.3s" }}>
+                    <span style={{ position: "absolute", top: -18, left: "50%", transform: "translateX(-50%)", fontSize: 10, fontFamily: "'JetBrains Mono', monospace", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{Math.round(score * 100) + "%"}</span>
+                    <span style={{ position: "absolute", bottom: -20, left: "50%", transform: "translateX(-50%)", fontSize: 9, fontFamily: "'JetBrains Mono', monospace", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{"#" + (i + 1)}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-        <div style={{
-          background: "var(--bg-secondary)", border: "1px solid var(--border-subtle)",
-          borderRadius: "var(--radius-lg)", padding: "22px 24px",
-          animation: "fadeInUp 0.5s ease 0.5s both",
-        }}>
+        <div style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-lg)", padding: "22px 24px", minWidth: 0 }}>
           <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
-            <BoxIcon /> Multi-Cloud Routing
+            <BoxIcon /> Model Usage
           </h3>
-          <CloudRoutingPanel />
-        </div>
-        <div style={{
-          background: "var(--bg-secondary)", border: "1px solid var(--border-subtle)",
-          borderRadius: "var(--radius-lg)", padding: "22px 24px",
-          animation: "fadeInUp 0.5s ease 0.6s both",
-        }}>
-          <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
-            <GitIcon /> Recent Evaluations
-          </h3>
-          {[
-            { commit: "a3f82d1", msg: "Adaptive chunking v2", pAtK: "89.2%", status: "pass" },
-            { commit: "7e1bc44", msg: "Add cross-encoder rerank", pAtK: "87.1%", status: "pass" },
-            { commit: "d9f3a02", msg: "Tune grounding threshold", pAtK: "86.5%", status: "pass" },
-            { commit: "1b4e7f9", msg: "Naive chunking baseline", pAtK: "62.3%", status: "baseline" },
-          ].map((ev, i) => (
-            <div key={ev.commit} style={{
-              display: "flex", alignItems: "center", gap: 12,
-              padding: "10px 12px", borderRadius: "var(--radius-sm)",
-              background: i === 0 ? "var(--accent-cyan-dim)" : "transparent",
-              marginBottom: 4, animation: `fadeIn 0.3s ease ${0.7 + i * 0.08}s both`,
-            }}>
-              <span style={{
-                fontFamily: "'JetBrains Mono', monospace", fontSize: 11,
-                color: "var(--accent-purple)", minWidth: 60,
-              }}>{ev.commit}</span>
-              <span style={{ flex: 1, fontSize: 12, color: "var(--text-secondary)" }}>{ev.msg}</span>
-              <span style={{
-                fontFamily: "'JetBrains Mono', monospace", fontSize: 11, fontWeight: 600,
-                color: ev.status === "baseline" ? "var(--text-secondary)" : "var(--accent-cyan)",
-              }}>{ev.pAtK}</span>
-              <Pill color={ev.status === "pass" ? "var(--accent-green)" : "var(--text-secondary)"}>{ev.status}</Pill>
+          <div style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", padding: "16px 20px", marginBottom: 10 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", gap: 10, whiteSpace: "nowrap" }}>
+                <div style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--accent-cyan)", flexShrink: 0 }} />
+                {stats.classify_model || "gpt-5-nano"}
+                <Pill color="var(--accent-cyan)">fast</Pill>
+              </div>
+              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: "var(--text-secondary)" }}>{"~" + Math.max(1, Math.round(nanoAvgMs / 1000)) + "s avg"}</span>
             </div>
-          ))}
+            <div style={{ height: 6, background: "var(--bg-tertiary)", borderRadius: 3, overflow: "hidden" }}>
+              <div style={{ height: "100%", borderRadius: 3, background: "linear-gradient(90deg, var(--accent-cyan), var(--accent-cyan)88)", width: "65%" }} />
+            </div>
+            <div style={{ fontSize: 11, fontFamily: "'JetBrains Mono', monospace", color: "var(--text-secondary)", marginTop: 6 }}>{nanoCalls + " calls \u00b7 classify, decompose"}</div>
+          </div>
+          <div style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", padding: "16px 20px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", gap: 10, whiteSpace: "nowrap" }}>
+                <div style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--accent-purple)", flexShrink: 0 }} />
+                {stats.generate_model || "gpt-5.2-chat-latest"}
+                <Pill color="var(--accent-purple)">quality</Pill>
+              </div>
+              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: "var(--text-secondary)" }}>{"~" + Math.max(1, Math.round(qualityAvgMs / 1000)) + "s avg"}</span>
+            </div>
+            <div style={{ height: 6, background: "var(--bg-tertiary)", borderRadius: 3, overflow: "hidden" }}>
+              <div style={{ height: "100%", borderRadius: 3, background: "linear-gradient(90deg, var(--accent-purple), var(--accent-purple)88)", width: "35%" }} />
+            </div>
+            <div style={{ fontSize: 11, fontFamily: "'JetBrains Mono', monospace", color: "var(--text-secondary)", marginTop: 6 }}>{qualityCalls + " calls \u00b7 generate, verify"}</div>
+          </div>
+        </div>
+
+        <div style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-lg)", padding: "22px 24px", minWidth: 0, overflow: "hidden" }}>
+          <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
+            <SearchIcon /> Recent Queries
+          </h3>
+          {runs.map((run, i) => {
+            const time = new Date(run.timestamp + "Z").toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+            const gScore = run.grounding_score || 0;
+            const gColor = gScore >= 0.7 ? "var(--accent-green)" : "var(--accent-amber)";
+            return (
+              <div key={run.id} style={{
+                display: "flex", alignItems: "center", gap: 12,
+                padding: "10px 12px", borderRadius: "var(--radius-sm)", marginBottom: 4,
+                background: i % 2 === 0 ? "var(--bg-tertiary)" : "transparent",
+              }}>
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: "var(--accent-purple)", minWidth: 70 }}>{time}</span>
+                <span style={{ flex: 1, fontSize: 12, color: "var(--text-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{run.query}</span>
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, fontWeight: 600, color: gColor, minWidth: 36, textAlign: "right" }}>{Math.round(gScore * 100) + "%"}</span>
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: "var(--text-secondary)", minWidth: 44, textAlign: "right" }}>{(run.latency_ms / 1000).toFixed(1) + "s"}</span>
+              </div>
+            );
+          })}
+          {runs.length === 0 && (
+            <div style={{ fontSize: 12, color: "var(--text-secondary)", textAlign: "center", padding: 20 }}>No agent runs yet. Try a Compare query first.</div>
+          )}
         </div>
       </div>
     </div>
@@ -995,7 +1074,7 @@ export default function APIUniverse() {
         {view === "search" && <SearchView onSearch={handleSearch} onAgent={handleAgent} view="search" />}
         {view === "results" && <ResultsView query={query} onBack={() => setView("search")} liveResults={liveResults} liveLatency={liveLatency} onSearch={handleSearch} onCompare={handleCompare} comparing={loading} />}
         {view === "compare" && <CompareView agentResult={agentResult} agentLoading={loading} />}
-        {view === "observability" && <ObservabilityView />}
+        {view === "observability" && <ObservabilityView token={token} />}
       </main>
     </div>
   );
