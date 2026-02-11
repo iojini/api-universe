@@ -9,7 +9,7 @@ load_dotenv()
 
 SECRET_KEY = os.getenv("JWT_SECRET", "api-universe-dev-secret-change-in-production")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60
+ACCESS_TOKEN_EXPIRE_MINUTES = 1440
 
 security = HTTPBearer()
 
