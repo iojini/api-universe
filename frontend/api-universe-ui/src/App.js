@@ -86,7 +86,6 @@ const XIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" 
 const AlertIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f5a623" strokeWidth="2" strokeLinecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>;
 const LayersIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>;
 const ActivityIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>;
-const GitIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 3v6m0 6v6"/></svg>;
 const BoxIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>;
 
 // ─── DATA ───────────────────────────────────────
@@ -148,18 +147,7 @@ const COMPARISON_DATA = {
   recommendation: "Stripe offers the strongest developer experience with the most comprehensive documentation. For high-volume processing (>$500K/mo), Adyen's Interchange++ model typically results in lower effective rates."
 };
 
-const METRICS = [
-  { label: "Precision@5", value: "89.2%", delta: "+2.1%", color: "var(--accent-cyan)" },
-  { label: "Grounding Score", value: "91.4%", delta: "+0.8%", color: "var(--accent-green)" },
-  { label: "Hallucination Rate", value: "3.2%", delta: "-0.5%", color: "var(--accent-amber)" },
-  { label: "P95 Latency", value: "1.82s", delta: "-120ms", color: "var(--accent-blue)" },
-];
 
-const CLOUD_ROUTING = [
-  { provider: "Azure OpenAI", pct: 70, latency: "1.2s", status: "healthy", color: "#4d7cff" },
-  { provider: "AWS Bedrock", pct: 25, latency: "1.8s", status: "healthy", color: "#f5a623" },
-  { provider: "OpenAI Direct", pct: 5, latency: "2.1s", status: "fallback", color: "#8b5cf6" },
-];
 
 // ─── COMPONENTS ─────────────────────────────────
 
@@ -177,22 +165,6 @@ function Pill({ children, color = "var(--accent-blue)", filled = false }) {
   );
 }
 
-function MetricCard({ label, value, delta, color, delay = 0 }) {
-  const isPositive = delta.startsWith("+") || delta.startsWith("-0") || delta.startsWith("-1");
-  return (
-    <div style={{
-      background: "var(--bg-secondary)", border: "1px solid var(--border-subtle)",
-      borderRadius: "var(--radius-lg)", padding: "20px 22px",
-      animation: `fadeInUp 0.5s ease ${delay}s both`,
-      position: "relative", overflow: "hidden",
-    }}>
-      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg, transparent, ${color}, transparent)` }} />
-      <div style={{ fontSize: 12, color: "var(--text-secondary)", fontWeight: 500, marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.08em" }}>{label}</div>
-      <div style={{ fontSize: 28, fontWeight: 700, fontFamily: "'Outfit', sans-serif", color, letterSpacing: "-0.02em" }}>{value}</div>
-      <div style={{ fontSize: 12, fontWeight: 500, marginTop: 6, color: delta.startsWith("-") && !label.includes("Hallucination") && !label.includes("Latency") ? "var(--accent-red)" : "var(--accent-green)", fontFamily: "'JetBrains Mono', monospace" }}>{delta} vs last week</div>
-    </div>
-  );
-}
 
 function TraceNode({ step, index, isActive }) {
   return (
@@ -343,48 +315,7 @@ function ComparisonTable() {
   );
 }
 
-function CloudRoutingPanel() {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10, animation: "fadeInUp 0.5s ease 0.2s both" }}>
-      {CLOUD_ROUTING.map((provider, i) => (
-        <div key={provider.provider} style={{
-          background: "var(--bg-secondary)", border: "1px solid var(--border-subtle)",
-          borderRadius: "var(--radius-md)", padding: "16px 20px",
-        }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <div style={{ width: 8, height: 8, borderRadius: "50%", background: provider.status === "healthy" ? "var(--accent-green)" : "var(--accent-amber)" }} />
-              <span style={{ fontSize: 13, fontWeight: 600 }}>{provider.provider}</span>
-              <Pill color={provider.status === "healthy" ? "var(--accent-green)" : "var(--accent-amber)"}>{provider.status}</Pill>
-            </div>
-            <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: "var(--text-secondary)" }}>{provider.latency} avg</span>
-          </div>
-          <div style={{ height: 6, background: "var(--bg-tertiary)", borderRadius: 3, overflow: "hidden" }}>
-            <div style={{
-              height: "100%", borderRadius: 3,
-              background: `linear-gradient(90deg, ${provider.color}, ${provider.color}88)`,
-              width: `${provider.pct}%`, transition: "width 1s ease",
-            }} />
-          </div>
-          <div style={{ fontSize: 11, fontFamily: "'JetBrains Mono', monospace", color: "var(--text-secondary)", marginTop: 6 }}>{provider.pct}% of traffic</div>
-        </div>
-      ))}
-    </div>
-  );
-}
 
-function MiniChart({ data, color, height = 40, width = 120 }) {
-  const max = Math.max(...data);
-  const min = Math.min(...data);
-  const range = max - min || 1;
-  const points = data.map((d, i) => `${(i / (data.length - 1)) * width},${height - ((d - min) / range) * (height - 4) - 2}`).join(" ");
-  return (
-    <svg width={width} height={height} style={{ display: "block" }}>
-      <polyline points={points} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx={(data.length - 1) / (data.length - 1) * width} cy={height - ((data[data.length-1] - min) / range) * (height - 4) - 2} r="3" fill={color} />
-    </svg>
-  );
-}
 
 // ─── VIEWS ──────────────────────────────────────
 
@@ -503,7 +434,7 @@ function SearchView({ onSearch, onAgent, view }) {
 }
 
 function ResultsView({ query, onBack, liveResults, liveLatency, onSearch, onCompare, comparing }) {
-  const [showTrace, setShowTrace] = useState(true);
+  const [showTrace] = useState(true);
   const results = liveResults || SAMPLE_RESULTS;
   const latency = liveLatency ? (liveLatency / 1000).toFixed(2) + "s" : "1.92s";
 
@@ -758,6 +689,7 @@ function ObservabilityView({ token }) {
     fetchMetrics();
     const interval = setInterval(fetchMetrics, 30000);
     return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   if (!metrics) {
