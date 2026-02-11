@@ -1,4 +1,5 @@
 import os
+import time
 import json
 from openai import OpenAI
 from dotenv import load_dotenv
@@ -6,6 +7,7 @@ from langgraph.graph import StateGraph, END
 from typing import TypedDict
 from src.search.semantic_search import search
 from src.search.grounding import check_grounding
+from src.metrics_db import log_agent_run
 
 load_dotenv()
 client = OpenAI()
@@ -29,6 +31,7 @@ class AgentState(TypedDict):
 
 
 def classify_query(state: AgentState) -> AgentState:
+    _start = time.time()
     messages = [
         {"role": "system", "content": """Classify the user query into one of these types:
 - SIMPLE: Single straightforward question about one API or topic
@@ -50,14 +53,17 @@ Respond with ONLY the type in JSON: {"type": "SIMPLE"} or {"type": "COMPARE"} or
         query_type = "SIMPLE"
 
     state["query_type"] = query_type
-    state["trace"].append({"step": "classify", "result": query_type})
+    _ms = round((time.time() - _start) * 1000)
+    state["trace"].append({"step": "classify", "result": query_type, "ms": _ms, "model": FAST_MODEL})
     return state
 
 
 def decompose_query(state: AgentState) -> AgentState:
+    _start = time.time()
     if state["query_type"] == "SIMPLE":
         state["sub_queries"] = [state["query"]]
-        state["trace"].append({"step": "decompose", "result": "single query (simple)"})
+        _ms = round((time.time() - _start) * 1000)
+        state["trace"].append({"step": "decompose", "result": "single query (simple)", "ms": _ms, "model": "none"})
         return state
 
     messages = [
@@ -75,11 +81,13 @@ def decompose_query(state: AgentState) -> AgentState:
         sub_queries = [state["query"]]
 
     state["sub_queries"] = sub_queries
-    state["trace"].append({"step": "decompose", "result": sub_queries})
+    _ms = round((time.time() - _start) * 1000)
+    state["trace"].append({"step": "decompose", "result": sub_queries, "ms": _ms, "model": FAST_MODEL})
     return state
 
 
 def retrieve(state: AgentState) -> AgentState:
+    _start = time.time()
     all_results = []
     seen = set()
 
@@ -92,15 +100,18 @@ def retrieve(state: AgentState) -> AgentState:
                 all_results.append(r)
 
     state["all_results"] = all_results
+    _ms = round((time.time() - _start) * 1000)
     state["trace"].append({
         "step": "retrieve",
         "sub_queries": len(state["sub_queries"]),
         "total_results": len(all_results),
+        "ms": _ms,
     })
     return state
 
 
 def generate(state: AgentState) -> AgentState:
+    _start = time.time()
     context_parts = []
     for i, r in enumerate(state["all_results"][:10]):
         meta = r["metadata"]
@@ -135,11 +146,13 @@ Do NOT include source numbers, endpoints, or URLs in the table. Keep it scannabl
 
     response = client.chat.completions.create(model=MODEL, messages=messages, max_completion_tokens=400)
     state["answer"] = response.choices[0].message.content
-    state["trace"].append({"step": "generate", "tokens": response.usage.completion_tokens})
+    _ms = round((time.time() - _start) * 1000)
+    state["trace"].append({"step": "generate", "tokens": response.usage.completion_tokens, "ms": _ms, "model": MODEL})
     return state
 
 
 def verify(state: AgentState) -> AgentState:
+    _start = time.time()
     sources = [
         {"api_name": r["metadata"]["api_name"], "text": r["text"][:200]}
         for r in state["all_results"][:10]
@@ -152,7 +165,8 @@ def verify(state: AgentState) -> AgentState:
         "total": grounding.get("total_count", 0),
         "claims": grounding.get("claims", []),
     }
-    state["trace"].append({"step": "verify", "grounding_score": state["grounding"]["score"]})
+    _ms = round((time.time() - _start) * 1000)
+    state["trace"].append({"step": "verify", "grounding_score": state["grounding"]["score"], "ms": _ms, "model": MODEL})
     return state
 
 
@@ -232,6 +246,36 @@ def run_agent(query: str) -> dict:
     }
 
     result = agent.invoke(initial_state)
+
+    # Log to SQLite
+    trace = result["trace"]
+    def _get_trace(step_name, field, default=0):
+        for t in trace:
+            if t["step"] == step_name:
+                return t.get(field, default)
+        return default
+
+    try:
+        log_agent_run({
+            "query": result["query"],
+            "query_type": result["query_type"],
+            "latency_ms": 0,  # will be set by the API layer
+            "grounding_score": result["grounding"].get("score", 0),
+            "tokens": _get_trace("generate", "tokens", 0),
+            "classify_model": _get_trace("classify", "model", ""),
+            "classify_ms": _get_trace("classify", "ms", 0),
+            "decompose_model": _get_trace("decompose", "model", ""),
+            "decompose_ms": _get_trace("decompose", "ms", 0),
+            "retrieve_ms": _get_trace("retrieve", "ms", 0),
+            "retrieve_count": _get_trace("retrieve", "total_results", 0),
+            "generate_model": _get_trace("generate", "model", ""),
+            "generate_ms": _get_trace("generate", "ms", 0),
+            "generate_tokens": _get_trace("generate", "tokens", 0),
+            "verify_model": _get_trace("verify", "model", ""),
+            "verify_ms": _get_trace("verify", "ms", 0),
+        })
+    except Exception as e:
+        print(f"Warning: failed to log metrics: {e}")
 
     return {
         "query": result["query"],

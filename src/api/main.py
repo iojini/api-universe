@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from src.search.semantic_search import search
 from src.search.rag import ask
 from src.agents.search_agent import run_agent
+from src.metrics_db import get_db, get_metrics
 from src.llm.router import router as llm_router
 from src.api.auth import create_token, verify_token
 from fastapi.middleware.cors import CORSMiddleware
@@ -114,31 +115,23 @@ def agent_endpoint(request: AgentRequest, user_id: str = Depends(verify_token)):
 
     result["user"] = user_id
     result["latency_ms"] = latency
+
+    # Update the latency in SQLite (agent logged 0, we have the real total)
+    try:
+        conn = get_db()
+        conn.execute(
+            "UPDATE agent_runs SET latency_ms = ? WHERE id = (SELECT MAX(id) FROM agent_runs)",
+            (latency,)
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Warning: failed to update latency in DB: {e}")
+
     return result
 
 
 @app.get("/metrics")
 def metrics(user_id: str = Depends(verify_token)):
-    """Observability dashboard data."""
-    if not query_log:
-        return {"message": "No queries logged yet", "total_queries": 0}
-
-    latencies = [q["latency_ms"] for q in query_log]
-    grounding_scores = [q["grounding_score"] for q in query_log if q["grounding_score"] is not None]
-
-    sorted_latencies = sorted(latencies)
-    p95_index = int(len(sorted_latencies) * 0.95)
-
-    return {
-        "total_queries": len(query_log),
-        "avg_latency_ms": round(sum(latencies) / len(latencies)),
-        "p95_latency_ms": sorted_latencies[p95_index] if sorted_latencies else 0,
-        "avg_grounding_score": round(sum(grounding_scores) / len(grounding_scores), 3) if grounding_scores else None,
-        "queries_by_endpoint": {
-            "/search": sum(1 for q in query_log if q["endpoint"] == "/search"),
-            "/ask": sum(1 for q in query_log if q["endpoint"] == "/ask"),
-            "/agent": sum(1 for q in query_log if q["endpoint"] == "/agent"),
-        },
-        "llm_routing": llm_router.get_stats(),
-        "recent_queries": query_log[-5:],
-    }
+    """Observability dashboard data from SQLite."""
+    return get_metrics()
