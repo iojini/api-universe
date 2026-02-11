@@ -470,23 +470,7 @@ function SearchView({ onSearch, onAgent, view }) {
           >
             Search <ArrowIcon />
           </button>
-          {onAgent && (
-            <button
-              onClick={() => { if (query.trim()) onAgent(query); }}
-              style={{
-                background: query.trim() ? "var(--accent-purple)" : "var(--bg-elevated)",
-                border: "none", borderRadius: isHome ? 14 : 8,
-                padding: isHome ? "10px 20px" : "8px 16px",
-                color: query.trim() ? "#fff" : "var(--text-secondary)",
-                fontSize: 13, fontWeight: 600, cursor: query.trim() ? "pointer" : "default",
-                display: "flex", alignItems: "center", gap: 6,
-                transition: "all 0.2s ease",
-                fontFamily: "'DM Sans', sans-serif",
-              }}
-            >
-              Compare <ArrowIcon />
-            </button>
-          )}
+
         </div>
       </div>
 
