@@ -68,6 +68,7 @@ def chunk_spec(filepath):
             "metadata": {
                 "type": "overview",
                 "api_name": api_info["title"],
+                "description": api_info["description"],
                 "version": api_info["version"],
                 "base_url": api_info["base_url"],
                 "source_file": os.path.basename(filepath),
@@ -90,6 +91,8 @@ def chunk_spec(filepath):
                     "api_name": api_info["title"],
                     "method": ep["method"],
                     "path": ep["path"],
+                    "summary": ep["summary"],
+                    "description": ep["description"],
                     "tags": ep["tags"],
                     "parameters": ep["parameters"],
                     "source_file": os.path.basename(filepath),

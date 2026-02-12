@@ -42,7 +42,17 @@ def search(query, top_k=5, use_reranker=True):
         results.append(result)
 
     if use_reranker and results:
-        results = rerank(query, results, top_k=top_k)
+        results = rerank(query, results, top_k=top_k * 2)
+
+    # Deduplicate by API name, keeping highest score
+    seen = set()
+    deduped = []
+    for r in results:
+        name = r.get("metadata", {}).get("api_name", "")
+        if name not in seen:
+            seen.add(name)
+            deduped.append(r)
+    results = deduped
 
     return results[:top_k]
 

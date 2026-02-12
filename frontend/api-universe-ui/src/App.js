@@ -220,7 +220,9 @@ function ResultCard({ result, index }) {
             <Pill color="var(--accent-cyan)">{result.category}</Pill>
           </div>
           <div style={{ display: "flex", gap: 12, marginTop: 6, fontSize: 12, color: "var(--text-secondary)" }}>
-            <span style={{ display: "flex", alignItems: "center", gap: 4 }}><ShieldIcon /> {result.auth}</span>
+            <span style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer", color: expanded ? "var(--accent-cyan)" : "var(--text-secondary)", transition: "color 0.2s" }}>
+              <ShieldIcon /> {result.endpoints.length} endpoint{result.endpoints.length !== 1 ? "s" : ""}
+            </span>
             <span style={{ display: "flex", alignItems: "center", gap: 4 }}><ZapIcon /> {result.pricing}</span>
           </div>
         </div>
@@ -242,9 +244,7 @@ function ResultCard({ result, index }) {
           fontFamily: "'JetBrains Mono', monospace",
         }}><LinkIcon /> {result.citations} citations</span>
       </p>
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-        {result.tags.map(t => <Pill key={t} color="var(--accent-purple)">{t}</Pill>)}
-      </div>
+
       {expanded && (
         <div style={{
           marginTop: 16, paddingTop: 16, borderTop: "1px solid var(--border-subtle)",
@@ -894,7 +894,25 @@ export default function APIUniverse() {
         score: r.rerank_score !== undefined ? Math.max(0, Math.min(1, (r.rerank_score + 12) / 16)) : r.score,
         auth: r.metadata.method ? r.metadata.method + " " + (r.metadata.path || "") : "REST",
         pricing: r.rerank_score !== undefined ? "rerank: " + r.rerank_score.toFixed(2) : "sim: " + r.score.toFixed(3),
-        description: r.text.substring(0, 300) + (r.text.length > 300 ? "..." : ""),
+        description: (() => {
+          let d = (r.metadata.description || "").trim();
+          if (!d) d = r.text;
+          d = d
+            .replace(/^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+\/\S*\s*/i, "")
+            .replace(new RegExp("^" + (r.metadata.api_name || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s*", "i"), "")
+            .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+            .replace(/<[^>]+>/g, "")
+            .replace(/#{1,6}\s*/g, "")
+            .replace(/\*{1,2}([^*]+)\*{1,2}/g, "$1")
+            .replace(/\n+/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+          if (d.length > 250) {
+            const cut = d.lastIndexOf(".", 250);
+            d = cut > 80 ? d.substring(0, cut + 1) : d.substring(0, 250) + "...";
+          }
+          return d;
+        })(),
         endpoints: r.metadata.path ? [r.metadata.method + " " + r.metadata.path] : [],
         tags: r.metadata.tags || [],
         citations: 0,
